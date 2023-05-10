@@ -30,8 +30,13 @@ func newCommandsMap() map[string]cliCommand {
 		},
 		"explore": {
 			name:		 "explore <area>",
-			description: "Explore an area to search for pokemon.",
+			description: "Explore an area to search for pokemon",
 			callback:	 commandExplore,
+		},
+		"catch": {
+			name: 		 "catch",
+			description: "Catch a pokemon and add it to the Pokedex",
+			callback:	 commandCatch,
 		},
 		"help": {
 			name:		 "help",
@@ -100,13 +105,53 @@ func commandExplore() error {
 		return err
 	}
 	areaName := fmt.Sprint(strings.Title(strings.ReplaceAll(secondInput, "-", " ")))
-	line := strings.Repeat("-", len(secondInput) + 13)
+	line := strings.Repeat("-", len(areaName) + 13)
 	fmt.Println(line+"\nExploring "+areaName+"...\n"+line+"\nFound Pokemon:")
 	for _, pokemon := range exploredArea.PokemonEncounters {
 		fmt.Println(" > "+pokemon.Pokemon.Name)
 	}
 	return nil
 }
+
+func commandCatch() error {
+	if secondInput == "" {
+		err := errors.New("Error: must include a pokemon to catch.\n(Enter 'catch pokemon')")
+		return err
+	}
+	pokemonName := secondInput
+	pokemonURL := pokeapiPokemonEndpoint + pokemonName
+	_, err := pokeapi.GetPokemon(&pokemonURL)
+	if err != nil {
+		return err
+	}
+
+	line := strings.Repeat("-", len(pokemonName) + 26)
+	fmt.Println(line+"\nThrowing a Pokeball at "+pokemonName+"...\n"+line)
+	fmt.Println("\n"+pokemonName+" escaped!")
+	return nil
+}
+
+/*
+Give the user a chance to catch the Pokemon 
+using the math/rand package.
+You can use the pokemon's "base experience" 
+to determine the chance of catching it. 
+	pokemon.BaseExperience int 
+The higher the base experience, the harder it should be to catch.
+
+Once the Pokemon is caught, add it to the user's Pokedex. 
+I used a map[string]Pokemon to keep track of caught Pokemon.
+You'll want to store the Pokemon's data 
+so that in the next step we can use it.
+
+Example usage
+Pokedex > catch pikachu
+Throwing a Pokeball at pikachu...
+pikachu escaped!
+Pokedex > catch pikachu
+Throwing a Pokeball at pikachu...
+pikachu was caught!
+*/
 
 func commandHelp() error {
 	line := "----------------"
@@ -156,11 +201,15 @@ func parse(toParse string) (string, string) {
 	return first, second
 }
 
-var pokeapiAreaEndpoint string = "https://pokeapi.co/api/v2/location-area/"
+var pokeapiURL string = "https://pokeapi.co/api/v2/"
+
+var pokeapiAreaEndpoint string = fmt.Sprint(pokeapiURL + "location-area/")
 var limitParam string = "10"
 var locationAreasURL string = fmt.Sprint(pokeapiAreaEndpoint+"?offset=0&limit="+limitParam)
 var nextAreasURL *string = &locationAreasURL
 var previousAreasURL *string = nil
+
+var pokeapiPokemonEndpoint string = fmt.Sprint(pokeapiURL + "pokemon/")
 
 var play bool = true
 var commands map[string]cliCommand
@@ -170,7 +219,8 @@ var secondInput string = "";
 
 func main() {
 	commands = newCommandsMap()
-	fmt.Print("\nWelcome to PokedexCLI!\n")
+	line := "\n----------------------\n"
+	fmt.Print(line+"Welcome to PokedexCLI!"+line+"\n")
 	for ; play == true; {
 		fmt.Print("pokedex > ")
 		go getInput()
