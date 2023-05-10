@@ -3,6 +3,7 @@ package pokecache
 import (
 	"time"
 	"sync"
+	"fmt"
 )
 
 type Cache struct {
@@ -12,7 +13,7 @@ type Cache struct {
 
 type cacheEntry struct {
 	created time.Time
-	val       []byte
+	val     []byte
 }
 
 func NewCache(interval time.Duration) Cache {
@@ -37,12 +38,14 @@ func (cache Cache) Add(key string, val []byte) {
 		created: time.Now(),
 		val:	 val,
 	}
+	fmt.Println("****** cache: add entry")
 }
 
 func (cache Cache) Get(key string) ([]byte, bool) {
 	cache.Mux.Lock()
 	defer cache.Mux.Unlock()
 	entry, ok := cache.entries[key]
+	fmt.Println("****** cache: try get entry")
 	return entry.val, ok
 }
 
@@ -54,6 +57,7 @@ func (cache Cache) reapLoop(interval time.Duration) {
 		for key, val := range cache.entries {
 			if val.created.Before(previousInterval) {
 				delete(cache.entries, key)
+				fmt.Println("****** cache: del entry")
 			}
 		}
 		cache.Mux.Unlock()

@@ -10,30 +10,28 @@ import (
     "log"
 )
 
-type Config struct {
-	scanner  *bufio.Scanner
-	ch       chan string
-	next     *string
-	previous *string
-}
-
 type cliCommand struct {
 	name		string
 	description	string
-	callback	func(*Config) error
+	callback	func() error
 }
 
 func newCommandsMap() map[string]cliCommand {
 	return map[string]cliCommand{
 		"map": {
 			name:		 "map",
-			description: "Displays the next 10 locations",
+			description: fmt.Sprint("Displays the next "+limitParam+" areas"),
 			callback:	 commandMap,
 		},
 		"mapb": {
 			name:		 "mapb",
-			description: "Displays back the previous 10 locations",
+			description: fmt.Sprint("Displays back the previous "+limitParam+" areas"),
 			callback:	 commandMapBack,
+		},
+		"explore": {
+			name:		 "explore <area>",
+			description: "Explore an area to search for pokemon.",
+			callback:	 commandExplore,
 		},
 		"help": {
 			name:		 "help",
@@ -48,7 +46,7 @@ func newCommandsMap() map[string]cliCommand {
 		"q": {
 			name:		 "q",
 			description: "Quit",
-			callback: func(*Config) error {
+			callback: func() error {
 				fmt.Println("Goodbye!")
 				play = false
 				return nil
@@ -57,100 +55,133 @@ func newCommandsMap() map[string]cliCommand {
 	}
 }
 
-func commandMap(config *Config) error {
-	fmt.Println("---------------------\nThe Next 10 Locations\n---------------------")
-	url := config.next
-	if url == nil {
+func commandMap() error {
+	line := "---------------------"
+	fmt.Println(line+"\nThe Next "+limitParam+" Areas\n"+line)
+	if nextAreasURL == nil {
 		err := errors.New("Error: end of map")
 		return err
 	}
-	return printLocations(config, url)
+	return printAreas(nextAreasURL)
 }
 
-func commandMapBack(config *Config) error {
-	fmt.Println("-------------------------\nThe Previous 10 Locations\n-------------------------")
-	url := config.previous
-	if url == nil {
+func commandMapBack() error {
+	line := "-------------------------"
+	fmt.Println(line+"\nThe Previous "+limitParam+" Areas\n"+line)
+	if previousAreasURL == nil {
 		err := errors.New("Error: cannot map back from start")
 		return err
 	}
-	return printLocations(config, url)
+	return printAreas(previousAreasURL)
 }
 
-func printLocations(config *Config, url *string) error {
-	locations, err := pokeapi.Fetch(url)
+func printAreas(URL *string) error {
+	areas, err := pokeapi.GetLocationAreas(URL)
 	if err != nil {
 		return err
 	}
-	config.next = locations.Next
-	config.previous = locations.Previous
-	for _, location := range locations.Results {
-		fmt.Println(strings.Title(strings.ReplaceAll(location.Name, "-", " ")))
+	nextAreasURL = areas.Next
+	previousAreasURL = areas.Previous
+	for _, area := range areas.Results {
+		fmt.Println(strings.Title(strings.ReplaceAll(area.Name, "-", " ")))
 	}
 	return nil
 }
 
-func commandHelp(config *Config) error {
-	fmt.Println("----------------\nPokedex commands\n----------------")
+func commandExplore() error {
+	if secondInput == "" {
+		err := errors.New("Error: must include an area to explore.\n(Enter 'explore area')")
+		return err
+	}
+	areaInput := strings.ReplaceAll(secondInput, " ", "-")
+	areaURL := pokeapiAreaEndpoint + areaInput
+	exploredArea, err := pokeapi.ExploreArea(&areaURL)
+	if err != nil {
+		return err
+	}
+	areaName := fmt.Sprint(strings.Title(strings.ReplaceAll(secondInput, "-", " ")))
+	line := strings.Repeat("-", len(secondInput) + 13)
+	fmt.Println(line+"\nExploring "+areaName+"...\n"+line+"\nFound Pokemon:")
+	for _, pokemon := range exploredArea.PokemonEncounters {
+		fmt.Println(" > "+pokemon.Pokemon.Name)
+	}
+	return nil
+}
+
+func commandHelp() error {
+	line := "----------------"
+	fmt.Println(line+"\nPokedex commands\n"+line)
 	for _, command := range commands {
-		fmt.Fprintln(os.Stderr, command.name, ":", command.description)
+		fmt.Println(command.name+": "+command.description)
 	}
 	return nil
 }
 
-func commandExit(config *Config) error {
+func commandExit() error {
+	if secondInput == "y" || secondInput == "yes" {
+		play = false
+		fmt.Println("\nGoodbye!")
+		return nil
+	}
 	fmt.Print("Exit? (y/n) ")
-	go getInput(config)
-	input := <- config.ch
-	input = parseString(input)
+	go getInput()
+	input := <- ch
+	input, _ = parse(input)
 	if input == "y" || input == "yes" {
 		play = false
-		fmt.Println("\nGoodbye!")	
+		fmt.Println("\nGoodbye!")
 	}
 	return nil
 }
 
-func getInput(config *Config) {
-	for config.scanner.Scan() {
-		config.ch <- config.scanner.Text()
+func getInput() error {
+	for scanner.Scan() {
+		ch <- scanner.Text()
 	}
-	if err := config.scanner.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, "reading standard input:", err)
+	if err := scanner.Err(); err != nil {
+		return err
 	}
+	return nil
 }
 
-func parseString(toParse string) string {
+func parse(toParse string) (string, string) {
 	toParse = strings.TrimSpace(toParse)
 	toParse = strings.ToLower(toParse)
-	return toParse
+	paramSlice := strings.SplitN(toParse, " ", 2)
+	first := paramSlice[0]
+	second := ""
+	if len(paramSlice) == 2 {
+		second = paramSlice[1]
+	}
+	return first, second
 }
+
+var pokeapiAreaEndpoint string = "https://pokeapi.co/api/v2/location-area/"
+var limitParam string = "10"
+var locationAreasURL string = fmt.Sprint(pokeapiAreaEndpoint+"?offset=0&limit="+limitParam)
+var nextAreasURL *string = &locationAreasURL
+var previousAreasURL *string = nil
 
 var play bool = true
 var commands map[string]cliCommand
 var scanner *bufio.Scanner = bufio.NewScanner(os.Stdin)
 var ch = make(chan string)
-var pokeapiLocationAreaEndpoint string = "https://pokeapi.co/api/v2/location-area/?offset=0&limit=10"
-var config *Config = &Config{
-	scanner: scanner,
-	ch: ch,
-	next: &pokeapiLocationAreaEndpoint,
-	previous: nil,
-}
+var secondInput string = "";
 
 func main() {
 	commands = newCommandsMap()
-	fmt.Print("\n")
+	fmt.Print("\nWelcome to PokedexCLI!\n")
 	for ; play == true; {
 		fmt.Print("pokedex > ")
-		go getInput(config)
+		go getInput()
 		inputString := <- ch
-		parsedString := parseString(inputString)
-		command, ok := commands[parsedString]
+		inputString, secondInput = parse(inputString)
+		command, ok := commands[inputString]
 		fmt.Print("\n")
 		if !ok {
 			fmt.Println("Invalid input, please try again.\n(Enter 'help' to list available commands)\n(Enter 'q' to quit)")
 		} else {
-			err := command.callback(config)
+			err := command.callback()
 			if err != nil {
 				log.Println(err)
 			}
