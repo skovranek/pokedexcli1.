@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"internal/pokeapi"
 	"bufio"
 	"os"
@@ -12,15 +13,17 @@ import (
 	"log"
 )
 
-var pokeapiURL string = "https://pokeapi.co/api/v2/"
-
-var pokeapiAreaEndpoint string = fmt.Sprint(pokeapiURL + "location-area/")
-var limitParam string = "10"
-var locationAreasURL string = fmt.Sprint(pokeapiAreaEndpoint+"?offset=0&limit="+limitParam)
-var nextAreasURL *string = &locationAreasURL
-var previousAreasURL *string = nil
-
-var pokeapiPokemonEndpoint string = fmt.Sprint(pokeapiURL + "pokemon/")
+/* 
+TODO:
+[x] list pokemon abilities
+[ ] verify if this should be outside func in pokeAPI package: NO
+var locationAreas *LocationAreas = &LocationAreas{}
+^No!
+[ ] add arrows in input
+[-] better variable names
+[ ] remove/comment out print statements
+[ ] add comments
+*/
 
 type Pokemon struct {
 	pokeapi.Pokemon
@@ -28,6 +31,16 @@ type Pokemon struct {
 }
 
 var pokedex map[string]Pokemon = map[string]Pokemon{}
+
+var pokeapiURL string = "https://pokeapi.co/api/v2/"
+var areaEndpoint string = fmt.Sprint(pokeapiURL + "location-area/")
+var limitParam string = "10"
+var areasURL string = fmt.Sprint(areaEndpoint+"?offset=0&limit="+limitParam)
+var nextAreasURL *string = &areasURL
+var previousAreasURL *string = nil
+var pokemonEndpoint string = fmt.Sprint(pokeapiURL + "pokemon/")
+
+var difficulty int = 100 // easy: 0, medium: 100, hard: 200
 
 var play bool = true
 var commands map[string]cliCommand
@@ -49,11 +62,11 @@ func getInput() error {
 func parse(toParse string) (string, string) {
 	toParse = strings.TrimSpace(toParse)
 	toParse = strings.ToLower(toParse)
-	paramSlice := strings.SplitN(toParse, " ", 2)
-	first := paramSlice[0]
+	args := strings.SplitN(toParse, " ", 2)
+	first := args[0]
 	second := ""
-	if len(paramSlice) == 2 {
-		second = paramSlice[1]
+	if len(args) == 2 {
+		second = args[1]
 	}
 	fmt.Println(">> 1) "+first+", 2) "+second)
 	return first, second
@@ -70,7 +83,7 @@ func commandMap() error {
 		err := errors.New("Error: cannot go past the end of the map.")
 		return err
 	}
-	return printAreas(nextAreasURL)
+	return getAreas(nextAreasURL)
 }
 
 func commandMapBack() error {
@@ -84,10 +97,10 @@ func commandMapBack() error {
 		err := errors.New("Error: cannot go back before the start of the map.")
 		return err
 	}
-	return printAreas(previousAreasURL)
+	return getAreas(previousAreasURL)
 }
 
-func printAreas(URL *string) error {
+func getAreas(URL *string) error {
 	areas, err := pokeapi.GetLocationAreas(URL)
 	if err != nil {
 		return err
@@ -110,7 +123,7 @@ func commandExplore() error {
 	fmt.Println(line+"\nExploring "+areaName+"...\n"+line)
 
 	areaInput := strings.ReplaceAll(secondInput, " ", "-")
-	areaURL := pokeapiAreaEndpoint + areaInput
+	areaURL := areaEndpoint + areaInput
 	exploredArea, err := pokeapi.ExploreArea(&areaURL)
 	if err != nil {
 		msg := "(Must include the correct name of an area to explore. Enter 'explore area')"
@@ -130,55 +143,55 @@ func commandCatch() error {
 		err := errors.New(invalidMsg+"(Must include a pokemon to catch. Enter 'catch pokemon')")
 		return err
 	}
-	pokemonName := secondInput
-	pokemonCap := strings.Title(pokemonName)
-	line := strings.Repeat("-", len(pokemonName) + 26)
-	fmt.Println(line+"\nThrowing a Pokeball at "+pokemonCap+"...\n"+line)
+	name := secondInput
+	nameCap := strings.Title(name)
+	line := strings.Repeat("-", len(name) + 26)
+	fmt.Println(line+"\nThrowing a pokeball at "+nameCap+"...\n"+line)
 
-	if _, ok := pokedex[pokemonName]; !ok {
-		pokemonURL := pokeapiPokemonEndpoint + pokemonName
-		newPokemon, err := pokeapi.GetPokemon(&pokemonURL)
+	if _, ok := pokedex[name]; !ok {
+		URL := pokemonEndpoint + name
+		newPokemon, err := pokeapi.GetPokemon(&URL)
 		if err != nil {
 			msg := "(Must include the correct name of an pokemon to catch. Enter 'catch pokemon')"
 			err := errors.New(invalidMsg+msg)
 			return err
 		}
-		pokedex[pokemonName] = Pokemon{
+		pokedex[name] = Pokemon{
 			*newPokemon, //Pokemon struct field:values
 			false, //Caught
 		}
 	}
 
-	pokemon := pokedex[pokemonName]
-	exp := math.Pow(math.Log(float64(pokemon.BaseExperience+200)), 2)
+	pokemon := pokedex[name]
+	exp := math.Pow(math.Log(float64(pokemon.BaseExperience + difficulty)), 2)
 	throw := float64(rand.Intn(50))
 	fmt.Println("throw: ",throw,", exp: ",exp)
 
 	if throw > exp {
-		fmt.Println("\nGotcha! "+pokemonCap+" was caught!")
+		fmt.Println("Gotcha! "+nameCap+" was caught!")
 		if !pokemon.Caught {
 			pokemon.Caught = true
-			pokedex[pokemonName] = pokemon
-			fmt.Println("\n"+pokemonCap+"'s data was newly added to the Pokedex!")
-
-			// TODO: print inspection
+			pokedex[name] = pokemon
+			fmt.Println(nameCap+"'s data was newly added to the Pokedex!")
+			fmt.Println("pokedex > inspect "+name+"")
+			commandInspect()
 		} else {
-			fmt.Println("\n"+pokemonCap+" is already in the Pokedex.")
+			fmt.Println(""+nameCap+"'s data is already in the Pokedex.")
 		}
 	} else {
-		fmt.Println("\n"+pokemonCap+" escaped!")
+		fmt.Println(nameCap+" escaped!")
 	}
 	return nil
 }
 
-func getOrder(pokemonInt int) string {
-	orderString := fmt.Sprint(pokemonInt)
-	if pokemonInt < 10 {
-		orderString = "00" + orderString
-	} else if pokemonInt < 100 {
-		orderString = "0" + orderString
+func getIndex(order int) string {
+	index := fmt.Sprint(order)
+	if order < 10 {
+		index = "00" + index
+	} else if order < 100 {
+		index = "0" + index
 	}
-	return orderString
+	return index
 }
 
 func commandInspect() error {
@@ -186,23 +199,60 @@ func commandInspect() error {
 		err := errors.New(invalidMsg+"(Must include a pokemon to inspect. Enter 'inspect pokemon')")
 		return err
 	}
-	pokemonName := secondInput
-	if pokemon, ok := pokedex[pokemonName]; ok && pokemon.Caught {
-		pokemonOrder := getOrder(pokemon.Order)
-		line := strings.Repeat("-", len(pokemonName) + 16)+"\n"
-		fmt.Print(line+"|Pokedex: No."+pokemonOrder+" "+strings.Title(pokemonName)+"|\n"+line)
-		fmt.Println("Name:",pokemonName,"\nHeight:",pokemon.Height,"\nWeight:",pokemon.Weight,"\nWeight:",pokemon.Weight,"\nStats:")
-		for _, stat := range pokemon.Stats {
-			statName := strings.Title(strings.ReplaceAll(stat.Stat.Name, "-", " "))
-			fmt.Println(" > "+statName+":",stat.BaseStat)
+	name := secondInput
+	if pokemon, ok := pokedex[name]; ok && pokemon.Caught {
+		pokedexIndex := getIndex(pokemon.Order)
+		line := strings.Repeat("-", len(name) + 16)+"\n"
+		fmt.Print(line+"Pokedex: No."+pokedexIndex+" "+strings.Title(name)+"\n"+line)
+
+		fmt.Println("Height:",pokemon.Height)
+		fmt.Println("Weight:",pokemon.Weight)
+
+		fmt.Println("Statistics:")
+		for _, s := range pokemon.Stats {
+			statName := strings.Title(strings.ReplaceAll(s.Stat.Name, "-", " "))
+			fmt.Println(" > "+statName+":",s.BaseStat)
 		}
-		fmt.Println("Type:")
-		for _, Type := range pokemon.Types {
-			fmt.Println(" > "+strings.Title(Type.Type.Name))
+
+		t := "Type: " + strings.Title(pokemon.Types[0].Type.Name)
+		if len(pokemon.Types) > 1 {
+			t = "Dual-" + t + "/" + strings.Title(pokemon.Types[1].Type.Name)
+		}
+		fmt.Println(t)
+
+		fmt.Println("Abilities:")
+		for _, a := range pokemon.Abilities {
+			fmt.Println(" > "+strings.Title(strings.ReplaceAll(a.Ability.Name, "-", " ")))
 		}
 	} else {
-		err := errors.New("Error: "+pokemonName+" is not in the Pokedex.\n(Must catch a pokemon before its data can be added to the Pokedex)")
+		msg := "(Must catch a pokemon before its data can be added to the Pokedex)"
+		err := errors.New("Error: "+name+" is not in the Pokedex.\n"+msg)
 		return err
+	}
+	return nil
+}
+
+func commandPokedex() error {
+	if secondInput != "" {
+		err := errors.New(invalidMsg+"(Command 'pokedex' does not take an input. Enter only 'pokedex')")
+		return err
+	}
+	fmt.Println("------------\nPokedex List\n------------")
+	list := []Pokemon{}
+	for _, pokemon := range pokedex {
+		if pokemon.Caught {
+			list = append(list, pokemon)
+		}
+	}
+	if len(list) == 0 {
+		fmt.Println(" > ...\n(Catch a pokemon to add its data to the Pokedex)")
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Order < list[j].Order
+	})
+	for _, pokemon := range list {
+		index := getIndex(pokemon.Order)
+		fmt.Println("> No."+index+" "+strings.Title(pokemon.Name))
 	}
 	return nil
 }
@@ -213,7 +263,7 @@ func commandHelp() error {
 		return err
 	}
 	line := "----------------"
-	fmt.Println(line+"\nPokedex commands\n"+line)
+	fmt.Println(line+"\nPokedex Commands\n"+line)
 	for _, command := range commands {
 		fmt.Println("> "+command.name+" - "+command.description)
 	}
@@ -270,6 +320,11 @@ func newCommandsMap() map[string]cliCommand {
 			description: "Check the Pokedex for data about a pokemon.",
 			callback:	 commandInspect,
 		},
+		"pokedex": {
+			name:		 "pokedex",
+			description: "Display the list of pokemon in the Pokedex.",
+			callback:	 commandPokedex,
+		},
 		"help": {
 			name:		 "help",
 			description: "Lists available commands.",
@@ -299,9 +354,9 @@ func main() {
 	for ; play == true; {
 		fmt.Print("pokedex > ")
 		go getInput()
-		inputString := <- ch
-		inputString, secondInput = parse(inputString)
-		command, ok := commands[inputString]
+		input := <- ch
+		input, secondInput = parse(input)
+		command, ok := commands[input]
 		fmt.Print("\n")
 		if !ok {
 			fmt.Println(invalidMsg+"(Enter 'help' to list available commands)")
