@@ -11,92 +11,96 @@ import (
 
 var cache pokecache.Cache = pokecache.NewCache(pokecache.Interval) //20 * time.Second, import "time"
 
-// TODO: verify if this should be outside func
-var locationAreas *LocationAreas = &LocationAreas{}
+func GetLocationAreas(URL string) (LocationAreas, error) {
+	body, ok := cache.Get(URL)
 
-func GetLocationAreas(URL *string) (*LocationAreas, error) {
-	body, ok := cache.Get(*URL)
 	if !ok {
-		response, err := http.Get(*URL)
+		response, err := http.Get(URL)
 		if err != nil {
-			return &LocationAreas{}, err
+			return LocationAreas{}, err
 		}
 		defer response.Body.Close()
+
+		body, err = ioutil.ReadAll(response.Body)
+		if response.StatusCode > 299 {
+			msg := fmt.Sprintf("Error: response failed. status-code: %d, body: %s", response.StatusCode, body)
+			err = errors.New(msg)
+			return LocationAreas{}, err
+		}
+		if err != nil {
+			return LocationAreas{}, err
+		}
+	}
+
+	locationAreasResult := LocationAreas{}
+	err := json.Unmarshal(body, &locationAreasResult)
+	if err != nil {
+		return LocationAreas{}, err
+	}
+
+	if !ok {
+		cache.Add(URL, body)
+	}
+
+	return locationAreasResult, nil
+}
+
+func ExploreArea(URL string) (ExploredArea, error) {
+	body, ok := cache.Get(URL)
+	
+	if !ok {
+		response, err := http.Get(URL)
+		if err != nil {
+			return ExploredArea{}, err
+		}
+		defer response.Body.Close()
+
 		body, err = ioutil.ReadAll(response.Body)
 		if response.StatusCode > 299 {
 			errString := fmt.Sprintf("Error: response failed. status code: %d, body: %s", response.StatusCode, body)
 			err = errors.New(errString)
-			return &LocationAreas{}, err
+			return ExploredArea{}, err
 		}
 		if err != nil {
-			return &LocationAreas{}, err
+			return ExploredArea{}, err
 		}
-		//cache.Add(*URL, body)
 	}
-	err := json.Unmarshal(body, locationAreas)
+
+	exploredAreaResult := ExploredArea{}
+	err := json.Unmarshal(body, &exploredAreaResult)
 	if err != nil {
-		return &LocationAreas{}, err
+		return ExploredArea{}, err
 	}
-	cache.Add(*URL, body)
-	return locationAreas, nil
-}
-
-var exploredArea *ExploredArea = &ExploredArea{}
-
-func ExploreArea(URL *string) (*ExploredArea, error) {
-	body, ok := cache.Get(*URL)
 	if !ok {
-		response, err := http.Get(*URL)
-		if err != nil {
-			return &ExploredArea{}, err
-		}
-		defer response.Body.Close()
-		body, err = ioutil.ReadAll(response.Body)
-		if response.StatusCode > 299 {
-			errString := fmt.Sprintf("Error: response failed. status code: %d, body: %s", response.StatusCode, body)
-			err = errors.New(errString)
-			return &ExploredArea{}, err
-		}
-		if err != nil {
-			return &ExploredArea{}, err
-		}
-		//cache.Add(*URL, body)
+		cache.Add(URL, body)
 	}
-	err := json.Unmarshal(body, exploredArea)
-	if err != nil {
-		return &ExploredArea{}, err
-	}
-	cache.Add(*URL, body)
-	return exploredArea, nil
+
+	return exploredAreaResult, nil
 }
 
-var pokemon *Pokemon = &Pokemon{}
-
-func GetPokemon(URL *string) (*Pokemon, error) {
-	// FYI: saving all pokemon to pokedex map, don't cache
-	//body, ok := cache.Get(*URL) 
-	//if !ok {
-	response, err := http.Get(*URL)
+func GetPokemon(URL string) (Pokemon, error) {
+	response, err := http.Get(URL)
 	if err != nil {
-		return &Pokemon{}, err
+		return Pokemon{}, err
 	}
 	defer response.Body.Close()
+
 	body, err := ioutil.ReadAll(response.Body)
 	if response.StatusCode > 299 {
 		errString := fmt.Sprintf("Error: response failed. status code: %d, body: %s", response.StatusCode, body)
 		err = errors.New(errString)
-		return &Pokemon{}, err
+		return Pokemon{}, err
 	}
 	if err != nil {
-		return &Pokemon{}, err
+		return Pokemon{}, err
 	}
-		//cache.Add(*URL, body)
-	//}
-	err = json.Unmarshal(body, pokemon)
+
+	pokemonResult := Pokemon{}
+	err = json.Unmarshal(body, &pokemonResult)
 	if err != nil {
-		return &Pokemon{}, err
+		return Pokemon{}, err
 	}
-	return pokemon, nil
+	return pokemonResult, nil
 }
 
 type LocationAreas struct {
@@ -116,33 +120,33 @@ type ExploredArea struct {
 }
 
 type Pokemon struct {
-	Name           string `json:"name"`
-	Order 		   int    `json:"order"`
-	BaseExperience int    `json:"base_experience"`
-	Height         int    `json:"height"`
-	Weight         int    `json:"weight"`
+	Name           string  `json:"name"`
+	Order 		   int     `json:"order"`
+	BaseExperience int     `json:"base_experience"`
+	Height         int     `json:"height"`
+	Weight         int     `json:"weight"`
 	Stats          []struct {
-		BaseStat   int    `json:"base_stat"`
-		Effort     int    `json:"effort"`
+		BaseStat   int     `json:"base_stat"`
+		Effort     int     `json:"effort"`
 		Stat       struct {
-			Name   string `json:"name"`
-			URL    string `json:"url"`
-		} 				  `json:"stat"`
-	} 				      `json:"stats"`
+			Name   string  `json:"name"`
+			URL    string  `json:"url"`
+		} 				   `json:"stat"`
+	} 				       `json:"stats"`
 	Types          []struct {
-		Slot       int    `json:"slot"`
+		Slot       int     `json:"slot"`
 		Type       struct {
-			Name   string `json:"name"`
-			URL    string `json:"url"`
-		}                 `json:"type"`
-	}                     `json:"types"`
+			Name   string  `json:"name"`
+			URL    string  `json:"url"`
+		}                  `json:"type"`
+	}                      `json:"types"`
 	Abilities      []struct {
 		Ability    struct {
-			Name   string `json:"name"`
-			URL    string `json:"url"`
-		}                 `json:"ability"`
-		IsHidden   bool   `json:"is_hidden"`
-		Slot       int    `json:"slot"`
-	}                     `json:"abilities"`
+			Name   string  `json:"name"`
+			URL    string  `json:"url"`
+		}                  `json:"ability"`
+		IsHidden   bool    `json:"is_hidden"`
+		Slot       int     `json:"slot"`
+	}                      `json:"abilities"`
 	//LocationAreaEncounters string `json:"location_area_encounters"`
 }

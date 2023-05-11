@@ -40,14 +40,14 @@ func (cache Cache) Add(key string, val []byte) {
 		created: time.Now(),
 		val:	 val,
 	}
-	fmt.Println("****** cache: add entry")
+	fmt.Println("******msg: cache: add entry")
 }
 
 func (cache Cache) Get(key string) ([]byte, bool) {
 	cache.Mux.Lock()
 	defer cache.Mux.Unlock()
 	entry, ok := cache.entries[key]
-	fmt.Println("****** cache: try entry")
+	fmt.Println("******msg: cache: try entry")
 	return entry.val, ok
 }
 
@@ -59,7 +59,7 @@ func (cache Cache) reapLoop(interval time.Duration) {
 		for key, val := range cache.entries {
 			if val.created.Before(previousInterval) {
 				delete(cache.entries, key)
-				fmt.Print("\n****** cache: del entry (interval: ",Interval,")\npokedex > ")
+				fmt.Print("\n******msg: cache: del entry (interval: ",Interval,")\npokedex > ")
 			}
 		}
 		cache.Mux.Unlock()
