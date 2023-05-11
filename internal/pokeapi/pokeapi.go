@@ -2,7 +2,6 @@ package pokeapi
 
 import (
 	"internal/pokecache"
-	"time"
 	"net/http"
 	"io/ioutil"
 	"fmt"
@@ -10,7 +9,7 @@ import (
 	"encoding/json"
 )
 
-var cache pokecache.Cache = pokecache.NewCache(10 * time.Second) //5 * time.Minute
+var cache pokecache.Cache = pokecache.NewCache(pokecache.Interval) //20 * time.Second, import "time"
 
 // TODO: verify if this should be outside func
 var locationAreas *LocationAreas = &LocationAreas{}
@@ -25,19 +24,20 @@ func GetLocationAreas(url *string) (*LocationAreas, error) {
 		defer response.Body.Close()
 		body, err = ioutil.ReadAll(response.Body)
 		if response.StatusCode > 299 {
-			errString := fmt.Sprintf("Response failed:\nstatus code: %d\nbody: %s", response.StatusCode, body)
+			errString := fmt.Sprintf("Error: response failed. status code: %d, body: %s", response.StatusCode, body)
 			err = errors.New(errString)
 			return &LocationAreas{}, err
 		}
 		if err != nil {
 			return &LocationAreas{}, err
 		}
-		cache.Add(*url, body)
+		//cache.Add(*url, body)
 	}
 	err := json.Unmarshal(body, locationAreas)
 	if err != nil {
 		return &LocationAreas{}, err
 	}
+	cache.Add(*url, body)
 	return locationAreas, nil
 }
 
@@ -53,44 +53,46 @@ func ExploreArea(url *string) (*ExploredArea, error) {
 		defer response.Body.Close()
 		body, err = ioutil.ReadAll(response.Body)
 		if response.StatusCode > 299 {
-			errString := fmt.Sprintf("Response failed:\nstatus code: %d\nbody: %s", response.StatusCode, body)
+			errString := fmt.Sprintf("Error: response failed. status code: %d, body: %s", response.StatusCode, body)
 			err = errors.New(errString)
 			return &ExploredArea{}, err
 		}
 		if err != nil {
 			return &ExploredArea{}, err
 		}
-		cache.Add(*url, body)
+		//cache.Add(*url, body)
 	}
 	err := json.Unmarshal(body, exploredArea)
 	if err != nil {
 		return &ExploredArea{}, err
 	}
+	cache.Add(*url, body)
 	return exploredArea, nil
 }
 
 var pokemon *Pokemon = &Pokemon{}
 
 func GetPokemon(url *string) (*Pokemon, error) {
-	body, ok := cache.Get(*url)
-	if !ok {
-		response, err := http.Get(*url)
-		if err != nil {
-			return &Pokemon{}, err
-		}
-		defer response.Body.Close()
-		body, err = ioutil.ReadAll(response.Body)
-		if response.StatusCode > 299 {
-			errString := fmt.Sprintf("Response failed:\nstatus code: %d\nbody: %s", response.StatusCode, body)
-			err = errors.New(errString)
-			return &Pokemon{}, err
-		}
-		if err != nil {
-			return &Pokemon{}, err
-		}
-		cache.Add(*url, body)
+	// FYI: saving all pokemon to pokedex map, don't cache
+	//body, ok := cache.Get(*url) 
+	//if !ok {
+	response, err := http.Get(*url)
+	if err != nil {
+		return &Pokemon{}, err
 	}
-	err := json.Unmarshal(body, pokemon)
+	defer response.Body.Close()
+	body, err := ioutil.ReadAll(response.Body)
+	if response.StatusCode > 299 {
+		errString := fmt.Sprintf("Error: response failed. status code: %d, body: %s", response.StatusCode, body)
+		err = errors.New(errString)
+		return &Pokemon{}, err
+	}
+	if err != nil {
+		return &Pokemon{}, err
+	}
+		//cache.Add(*url, body)
+	//}
+	err = json.Unmarshal(body, pokemon)
 	if err != nil {
 		return &Pokemon{}, err
 	}

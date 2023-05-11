@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+var Interval = 10 * time.Second
+
 type Cache struct {
 	entries map[string]cacheEntry
 	Mux		*sync.Mutex
@@ -38,29 +40,29 @@ func (cache Cache) Add(key string, val []byte) {
 		created: time.Now(),
 		val:	 val,
 	}
-	fmt.Println("\n****** cache: add entry")
+	fmt.Println("****** cache: add entry")
 }
 
 func (cache Cache) Get(key string) ([]byte, bool) {
 	cache.Mux.Lock()
 	defer cache.Mux.Unlock()
 	entry, ok := cache.entries[key]
-	fmt.Println("\n****** cache: try get entry")
+	fmt.Println("****** cache: try entry")
 	return entry.val, ok
 }
 
 func (cache Cache) reapLoop(interval time.Duration) {
 	ch := time.Tick(interval)
 	previousInterval := time.Now()
-	for rightNow := range ch {
+	for currentIntervalNow := range ch {
 		cache.Mux.Lock()
 		for key, val := range cache.entries {
 			if val.created.Before(previousInterval) {
 				delete(cache.entries, key)
-				fmt.Println("\n****** cache: del entry")
+				fmt.Print("\n****** cache: del entry (interval: ",Interval,")\npokedex > ")
 			}
 		}
 		cache.Mux.Unlock()
-		previousInterval = rightNow
+		previousInterval = currentIntervalNow
 	}
 }
